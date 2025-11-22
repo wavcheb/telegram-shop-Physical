@@ -464,5 +464,51 @@ class InventoryLog(Database.BASE):
 
 
 def register_models():
-    Database.BASE.metadata.create_all(Database().engine)
-    Role.insert_roles()
+    """Create all database tables and insert default roles"""
+    import logging
+    import time
+    from sqlalchemy.exc import OperationalError
+
+    max_retries = 5
+    retry_delay = 2  # seconds
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            db = Database()
+            logging.info(f"Creating database tables (attempt {attempt}/{max_retries})...")
+            Database.BASE.metadata.create_all(db.engine)
+
+            # Verify tables were created
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            logging.info(f"Tables created successfully: {tables}")
+
+            # Insert default roles
+            Role.insert_roles()
+            logging.info("Default roles inserted")
+            return  # Success - exit function
+
+        except OperationalError as e:
+            if "could not translate host name" in str(e) or "Temporary failure in name resolution" in str(e):
+                if attempt < max_retries:
+                    wait_time = retry_delay * (2 ** (attempt - 1))  # Exponential backoff: 2s, 4s, 8s, 16s
+                    logging.warning(
+                        f"Database connection failed (attempt {attempt}/{max_retries}): {e}. "
+                        f"Retrying in {wait_time} seconds..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logging.error(
+                        f"Failed to connect to database after {max_retries} attempts. "
+                        f"Please check if PostgreSQL container is running and network is configured correctly.",
+                        exc_info=True
+                    )
+                    raise
+            else:
+                # Different OperationalError - raise immediately
+                logging.error(f"Database operational error: {e}", exc_info=True)
+                raise
+        except Exception as e:
+            logging.error(f"Failed to create database tables: {e}", exc_info=True)
+            raise
