@@ -132,6 +132,7 @@ class Goods(Database.BASE):
     stock_quantity = Column(Integer, nullable=False, default=0)  # Total stock in warehouse
     reserved_quantity = Column(Integer, nullable=False, default=0)  # Reserved in pending orders
     category = relationship("Categories", back_populates="item")
+    media = relationship("GoodsMedia", back_populates="item", cascade="all, delete-orphan")
 
     @property
     def available_quantity(self) -> int:
@@ -146,6 +147,31 @@ class Goods(Database.BASE):
         self.description = description
         self.category_name = category_name
         self.stock_quantity = stock_quantity
+
+
+class GoodsMedia(Database.BASE):
+    __tablename__ = 'goods_media'
+
+    id = Column(Integer, primary_key=True)
+    item_name = Column(String(100), ForeignKey('goods.name', ondelete="CASCADE", onupdate="CASCADE"),
+                       nullable=False)
+    file_id = Column(String(255), nullable=False)
+    media_type = Column(String(10), nullable=False)  # 'photo' or 'video'
+    position = Column(Integer, nullable=False, default=0)
+    added_at = Column(DateTime, nullable=False, server_default=func.now())
+
+    item = relationship("Goods", back_populates="media")
+
+    __table_args__ = (
+        Index('ix_goods_media_item_position', 'item_name', 'position'),
+    )
+
+    def __init__(self, item_name: str, file_id: str, media_type: str, position: int = 0, **kw: Any):
+        super().__init__(**kw)
+        self.item_name = item_name
+        self.file_id = file_id
+        self.media_type = media_type
+        self.position = position
 
 
 class BoughtGoods(Database.BASE):

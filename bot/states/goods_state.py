@@ -14,13 +14,23 @@ class AddItemFSM(StatesGroup):
     2) description,
     3) price,
     4) category,
-    5) initial stock quantity.
+    5) initial stock quantity,
+    6) media upload (photos/videos).
     """
     waiting_item_name = State()
     waiting_item_description = State()
     waiting_item_price = State()
     waiting_category = State()
     waiting_stock_quantity = State()
+    waiting_media_upload = State()
+
+
+class MediaManageFSM(StatesGroup):
+    """FSM for managing media on existing products."""
+    waiting_item_name = State()
+    waiting_action = State()
+    waiting_media_upload = State()
+    waiting_media_delete = State()
 
 
 class UpdateItemFSM(StatesGroup):

@@ -1,11 +1,12 @@
 from functools import partial
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InputMediaPhoto, InputMediaVideo, ContentType
 from aiogram.fsm.context import FSMContext
 
 from bot.database.methods import get_bought_item_info, check_value, query_categories, query_user_bought_items, \
     get_item_info_cached
+from bot.database.methods.media import get_goods_media
 from bot.keyboards import item_info, back, lazy_paginated_keyboard
 from bot.i18n import localize
 from bot.config import EnvKeys
@@ -13,6 +14,18 @@ from bot.utils import LazyPaginator
 from bot.states import ShopStates
 
 router = Router()
+
+
+async def _safe_edit_text(message, text, **kwargs):
+    """Try to edit message text. If message is media, delete and send new text message."""
+    if message.content_type == ContentType.TEXT:
+        await message.edit_text(text, **kwargs)
+    else:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await message.answer(text, **kwargs)
 
 
 @router.callback_query(F.data == "shop")
@@ -33,7 +46,7 @@ async def shop_callback_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="categories-page_",
     )
 
-    await call.message.edit_text(localize("shop.categories.title"), reply_markup=markup)
+    await _safe_edit_text(call.message, localize("shop.categories.title"), reply_markup=markup)
 
     # Save paginator state
     await state.update_data(categories_paginator=paginator.get_state())
@@ -68,7 +81,7 @@ async def navigate_categories(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="categories-page_"
     )
 
-    await call.message.edit_text(localize('shop.categories.title'), reply_markup=markup)
+    await _safe_edit_text(call.message, localize('shop.categories.title'), reply_markup=markup)
 
     # Update state
     await state.update_data(categories_paginator=paginator.get_state())
@@ -106,7 +119,7 @@ async def items_list_callback_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix=f"goods-page_{category_name}_",
     )
 
-    await call.message.edit_text(localize("shop.goods.choose"), reply_markup=markup)
+    await _safe_edit_text(call.message, localize("shop.goods.choose"), reply_markup=markup)
 
     # Save state
     await state.update_data(
@@ -152,7 +165,7 @@ async def navigate_goods(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix=f"goods-page_{category_name}_",
     )
 
-    await call.message.edit_text(localize("shop.goods.choose"), reply_markup=markup)
+    await _safe_edit_text(call.message, localize("shop.goods.choose"), reply_markup=markup)
 
     # Update state
     await state.update_data(goods_paginator=paginator.get_state())
@@ -161,7 +174,7 @@ async def navigate_goods(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith('item_'))
 async def item_info_callback_handler(call: CallbackQuery):
     """
-    Show detailed information about the item.
+    Show detailed information about the item with media support.
     Format: item_{name}_{category}_goods-page_{category}_{page}
     """
     # Parse callback data
@@ -212,17 +225,68 @@ async def item_info_callback_handler(call: CallbackQuery):
             # Fallback if item not found
             quantity_line = localize("shop.item.quantity_left", count=0)
 
-    markup = item_info(item_name, back_data)
+    # Get media for the item
+    media_list = get_goods_media(item_name)
 
-    await call.message.edit_text(
-        "\n".join([
-            localize("shop.item.title", name=item_name),
-            localize("shop.item.description", description=item_info_data["description"]),
-            localize("shop.item.price", amount=item_info_data["price"], currency=EnvKeys.PAY_CURRENCY),
-            quantity_line,
-        ]),
-        reply_markup=markup,
-    )
+    text = "\n".join([
+        localize("shop.item.title", name=item_name),
+        localize("shop.item.description", description=item_info_data["description"]),
+        localize("shop.item.price", amount=item_info_data["price"], currency=EnvKeys.PAY_CURRENCY),
+        quantity_line,
+    ])
+
+    markup = item_info(item_name, back_data, media_count=len(media_list))
+
+    if media_list:
+        # Product has media — show first photo/video with caption
+        first_media = media_list[0]
+
+        # Delete old message (can't edit text message to photo)
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+
+        if first_media['media_type'] == 'video':
+            await call.message.answer_video(
+                video=first_media['file_id'],
+                caption=text,
+                reply_markup=markup,
+            )
+        else:
+            await call.message.answer_photo(
+                photo=first_media['file_id'],
+                caption=text,
+                reply_markup=markup,
+            )
+    else:
+        # No media — text only (use safe edit in case previous message was media)
+        await _safe_edit_text(call.message, text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith('gallery_'))
+async def gallery_callback_handler(call: CallbackQuery):
+    """
+    Send all media for a product as a media group.
+    """
+    item_name = call.data[8:]  # Remove 'gallery_'
+    media_list = get_goods_media(item_name)
+
+    if not media_list or len(media_list) < 2:
+        await call.answer(localize("shop.item.not_found"), show_alert=True)
+        return
+
+    # Build media group
+    media_group = []
+    for m in media_list:
+        if m['media_type'] == 'video':
+            media_group.append(InputMediaVideo(media=m['file_id']))
+        else:
+            media_group.append(InputMediaPhoto(media=m['file_id']))
+
+    # Send media group (no keyboard — product card with keyboard stays)
+    await call.message.answer_media_group(media=media_group)
+    await call.answer()
 
 
 @router.callback_query(F.data == "bought_items")
@@ -245,7 +309,7 @@ async def bought_items_callback_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="bought-goods-page_user_"
     )
 
-    await call.message.edit_text(localize("purchases.title"), reply_markup=markup)
+    await _safe_edit_text(call.message, localize("purchases.title"), reply_markup=markup)
 
     # Save paginator state
     await state.update_data(bought_items_paginator=paginator.get_state())
@@ -294,7 +358,7 @@ async def navigate_bought_items(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix=f"bought-goods-page_{data_type}_"
     )
 
-    await call.message.edit_text(localize("purchases.title"), reply_markup=markup)
+    await _safe_edit_text(call.message, localize("purchases.title"), reply_markup=markup)
 
     # Update state
     await state.update_data(bought_items_paginator=paginator.get_state())
@@ -318,4 +382,4 @@ async def bought_item_info_callback_handler(call: CallbackQuery):
         localize("purchases.item.unique_id", uid=item["unique_id"]),
         localize("purchases.item.value", value=item["value"]),
     ])
-    await call.message.edit_text(text, parse_mode='HTML', reply_markup=back(back_data))
+    await _safe_edit_text(call.message, text, parse_mode='HTML', reply_markup=back(back_data))

@@ -9,7 +9,8 @@ from bot.database.methods import (
     check_category_cached, check_item_cached, create_item
 )
 from bot.database.methods.inventory import add_inventory
-from bot.keyboards.inline import back
+from bot.database.methods.media import add_goods_media, get_goods_media_count, MAX_MEDIA_PER_ITEM
+from bot.keyboards.inline import back, media_upload_keyboard
 from bot.logger_mesh import audit_logger
 from bot.filters import HasPermissionFilter
 from bot.config import EnvKeys
@@ -98,7 +99,7 @@ async def check_category_for_add_item(message: Message, state):
 @router.message(AddItemFSM.waiting_stock_quantity, F.text)
 async def finish_adding_item(message: Message, state):
     """
-    Create position with initial stock quantity and notify group (if configured).
+    Create position with initial stock quantity, then prompt for media upload.
     """
     stock_text = (message.text or "").strip()
     if not stock_text.isdigit():
@@ -144,13 +145,109 @@ async def finish_adding_item(message: Message, state):
                 await state.clear()
                 return
 
+    await state.update_data(stock_quantity=stock_quantity)
+
+    # Prompt for media upload
     await message.answer(
-        localize('admin.goods.add.result.created_with_stock',
-                 name=item_name,
-                 stock=stock_quantity),
+        localize('admin.goods.add.media.prompt', max=MAX_MEDIA_PER_ITEM),
+        reply_markup=media_upload_keyboard(done_cb="add_item_media_done", skip_cb="add_item_media_skip"),
+    )
+    await state.set_state(AddItemFSM.waiting_media_upload)
+
+
+@router.callback_query(F.data == 'add_item_media_skip', AddItemFSM.waiting_media_upload)
+async def skip_media_upload(call: CallbackQuery, state):
+    """Skip media upload during product creation."""
+    data = await state.get_data()
+    item_name = data.get('item_name')
+    stock_quantity = data.get('stock_quantity', 0)
+
+    await call.message.edit_text(
+        localize('admin.goods.media.skipped'),
         reply_markup=back('goods_management')
     )
 
+    await _notify_channel_and_log(call.message, state, item_name, stock_quantity)
+    await state.clear()
+
+
+@router.callback_query(F.data == 'add_item_media_done', AddItemFSM.waiting_media_upload)
+async def done_media_upload(call: CallbackQuery, state):
+    """Finish media upload during product creation."""
+    data = await state.get_data()
+    item_name = data.get('item_name')
+    stock_quantity = data.get('stock_quantity', 0)
+    media_count = get_goods_media_count(item_name)
+
+    await call.message.edit_text(
+        localize('admin.goods.media.done', name=item_name)
+        + "\n" + localize('admin.goods.media.status', count=media_count),
+        reply_markup=back('goods_management')
+    )
+
+    await _notify_channel_and_log(call.message, state, item_name, stock_quantity)
+    await state.clear()
+
+
+@router.message(AddItemFSM.waiting_media_upload, F.photo)
+async def handle_photo_upload_add(message: Message, state):
+    """Handle photo upload during product creation."""
+    data = await state.get_data()
+    item_name = data.get('item_name')
+
+    current_count = get_goods_media_count(item_name)
+    if current_count >= MAX_MEDIA_PER_ITEM:
+        await message.answer(
+            localize('admin.goods.media.limit_reached', max=MAX_MEDIA_PER_ITEM),
+            reply_markup=media_upload_keyboard(done_cb="add_item_media_done"),
+        )
+        return
+
+    file_id = message.photo[-1].file_id  # Largest photo size
+    add_goods_media(item_name, file_id, 'photo')
+    current_count += 1
+
+    await message.answer(
+        localize('admin.goods.media.added_photo', count=current_count, max=MAX_MEDIA_PER_ITEM),
+        reply_markup=media_upload_keyboard(done_cb="add_item_media_done"),
+    )
+
+
+@router.message(AddItemFSM.waiting_media_upload, F.video)
+async def handle_video_upload_add(message: Message, state):
+    """Handle video upload during product creation."""
+    data = await state.get_data()
+    item_name = data.get('item_name')
+
+    current_count = get_goods_media_count(item_name)
+    if current_count >= MAX_MEDIA_PER_ITEM:
+        await message.answer(
+            localize('admin.goods.media.limit_reached', max=MAX_MEDIA_PER_ITEM),
+            reply_markup=media_upload_keyboard(done_cb="add_item_media_done"),
+        )
+        return
+
+    file_id = message.video.file_id
+    add_goods_media(item_name, file_id, 'video')
+    current_count += 1
+
+    await message.answer(
+        localize('admin.goods.media.added_video', count=current_count, max=MAX_MEDIA_PER_ITEM),
+        reply_markup=media_upload_keyboard(done_cb="add_item_media_done"),
+    )
+
+
+@router.message(AddItemFSM.waiting_media_upload)
+async def handle_invalid_media_upload_add(message: Message, state):
+    """Handle non-photo/video messages during media upload."""
+    await message.answer(
+        localize('admin.goods.media.invalid_type'),
+        reply_markup=media_upload_keyboard(done_cb="add_item_media_done", skip_cb="add_item_media_skip"),
+    )
+
+
+async def _notify_channel_and_log(message: Message, state, item_name: str, stock_quantity: int):
+    """Notify channel about new product and log the action."""
     # Optionally notify a channel
     channel_url = EnvKeys.CHANNEL_URL or ""
     parsed = urlparse(channel_url)
@@ -176,8 +273,13 @@ async def finish_adding_item(message: Message, state):
         except TelegramBadRequest as e:
             await message.answer(localize("errors.channel.telegram_bad_request", e=e))
 
-    admin_info = await message.bot.get_chat(message.from_user.id)
-    audit_logger.info(
-        f'Admin {message.from_user.id} ({admin_info.first_name}) created a new item "{item_name}" with stock {stock_quantity}'
-    )
-    await state.clear()
+    # Get admin info for audit log - use bot instance from message
+    try:
+        admin_info = await message.bot.get_chat(message.chat.id)
+        audit_logger.info(
+            f'Admin {message.chat.id} ({admin_info.first_name}) created a new item "{item_name}" with stock {stock_quantity}'
+        )
+    except Exception:
+        audit_logger.info(
+            f'Admin created a new item "{item_name}" with stock {stock_quantity}'
+        )
