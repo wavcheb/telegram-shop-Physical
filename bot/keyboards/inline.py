@@ -149,13 +149,27 @@ async def lazy_paginated_keyboard(
     return kb.as_markup()
 
 
-def item_info(item_name: str, back_data: str) -> InlineKeyboardMarkup:
+def item_info(item_name: str, back_data: str, media_count: int = 0) -> InlineKeyboardMarkup:
     """
-    Product card with Add to Cart button.
+    Product card with Add to Cart button and optional gallery button.
     """
     kb = InlineKeyboardBuilder()
     kb.button(text=localize("btn.add_to_cart"), callback_data=f"add_to_cart_{item_name}")
+    if media_count > 1:
+        kb.button(text=localize("btn.view_gallery", count=media_count), callback_data=f"gallery_{item_name}")
     kb.button(text=localize("btn.back"), callback_data=back_data)
+    kb.adjust(2)
+    return kb.as_markup()
+
+
+def media_upload_keyboard(done_cb: str = "media_done", skip_cb: str = None) -> InlineKeyboardMarkup:
+    """
+    Keyboard shown during media upload: Done + optional Skip.
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(text=localize("btn.done"), callback_data=done_cb)
+    if skip_cb:
+        kb.button(text=localize("btn.skip_media"), callback_data=skip_cb)
     kb.adjust(2)
     return kb.as_markup()
 

@@ -25,6 +25,7 @@ async def goods_management_callback_handler(call: CallbackQuery, state):
     actions = [
         (localize("admin.goods.add_position"), "add_item"),
         (localize("admin.goods.manage_stock"), "manage_stock"),
+        (localize("admin.goods.manage_media"), "manage_media"),
         (localize("admin.goods.update_position"), "update_item"),
         (localize("admin.goods.delete_position"), "delete_item"),
         (localize("admin.goods.view_stock"), "view_stock_status"),
