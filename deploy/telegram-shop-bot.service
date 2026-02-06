@@ -1,0 +1,27 @@
+[Unit]
+Description=Telegram Shop Bot
+After=network.target mariadb.service redis.service
+Wants=mariadb.service redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/telegram-shop
+ExecStart=/var/www/telegram-shop/venv/bin/python run.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment file
+EnvironmentFile=/var/www/telegram-shop/.env
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/telegram-shop/logs /var/www/telegram-shop/data
+
+[Install]
+WantedBy=multi-user.target

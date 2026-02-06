@@ -5,8 +5,7 @@ payments, referral system, and advanced order tracking capabilities.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Aiogram](https://img.shields.io/badge/aiogram-3.22+-green.svg)](https://docs.aiogram.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue.svg)](https://www.postgresql.org/)
-[![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
+[![MariaDB](https://img.shields.io/badge/MariaDB-10.6+-blue.svg)](https://mariadb.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
@@ -151,9 +150,11 @@ telegram_shop/
 ├── bot_cli.py                      # CLI admin tool
 ├── btc_addresses.txt               # Bitcoin address pool
 ├── requirements.txt                # Python dependencies
-├── Dockerfile                      # Docker image definition
-├── docker-compose.yml              # Multi-container setup
 ├── .env.example                    # Environment template
+├── deploy/                         # Deployment configs
+│   ├── telegram-shop-bot.service   # systemd service file
+│   ├── nginx-monitoring.conf       # nginx proxy for monitoring
+│   └── setup.sh                    # Setup script
 │
 ├── bot/
 │   ├── __init__.py
@@ -286,7 +287,7 @@ telegram_shop/
         ┌──────────────┼──────────────┬──────────────┐
         ▼              ▼              ▼              ▼
 ┌──────────────┐ ┌──────────┐ ┌───────────┐ ┌──────────────┐
-│ PostgreSQL   │ │  Redis   │ │ Bot CLI   │ │  Monitoring  │
+│  MariaDB     │ │  Redis   │ │ Bot CLI   │ │  Monitoring  │
 │  Database    │ │  Cache   │ │ (bot_cli. │ │   Server     │
 │ (inventory,  │ │  & FSM   │ │  py)      │ │  (port 9090) │
 │  orders,     │ │ Storage  │ └───────────┘ └──────────────┘
@@ -334,9 +335,9 @@ telegram_shop/
 ## 📋 Requirements
 
 - Python 3.11+
-- PostgreSQL 16+
+- MariaDB 10.6+ (or MySQL 8.0+)
 - Redis 7+
-- Docker & Docker Compose (recommended)
+- FastPanel (optional, for nginx reverse proxy of monitoring dashboard)
 
 ## ⚙️ Environment Variables
 
@@ -394,16 +395,16 @@ The application requires the following environment variables:
 | `MONITORING_HOST` | Monitoring server bind address | `localhost` |
 | `MONITORING_PORT` | Monitoring server port         | `9090`      |
 
-**Note**: When running in Docker, set `MONITORING_HOST=0.0.0.0` to allow external access.
+**Note**: Set `MONITORING_HOST=0.0.0.0` to allow external access, or use nginx proxy.
 
 </details>
 
 <details>
 <summary><b>📦 Redis Storage</b></summary>
 
-| Variable         | Description                 | Default |
-|------------------|-----------------------------|---------|
-| `REDIS_HOST`     | Redis server address        | `redis` |
+| Variable         | Description                 | Default     |
+|------------------|-----------------------------|-------------|
+| `REDIS_HOST`     | Redis server address        | `localhost` |
 | `REDIS_PORT`     | Redis server port           | `6379`  |
 | `REDIS_DB`       | Redis database number       | `0`     |
 | `REDIS_PASSWORD` | Redis password (if enabled) | -       |
@@ -411,67 +412,30 @@ The application requires the following environment variables:
 </details>
 
 <details>
-<summary><b>🗄️ Database (Docker)</b></summary>
+<summary><b>🗄️ Database (MariaDB/MySQL)</b></summary>
 
-| Variable            | Description              | Default               |
-|---------------------|--------------------------|-----------------------|
-| `POSTGRES_DB`       | PostgreSQL database name | **Required**          |
-| `POSTGRES_USER`     | PostgreSQL username      | `postgres`            |
-| `POSTGRES_PASSWORD` | PostgreSQL password      | **Required**          |
-| `DB_PORT`           | PostgreSQL port          | `5432`                |
-| `DB_DRIVER`         | Database driver          | `postgresql+psycopg2` |
-
-</details>
-
-<details>
-<summary><b>🗄️ Database (Manual Deploy)</b></summary>
-
-For manual deployment, configure `DATABASE_URL` in `bot/config/env.py`:
-
-```python
-DATABASE_URL = "postgresql+psycopg2://user:password@localhost:5432/db_name"
-```
-
-[SQLAlchemy Documentation](https://docs.sqlalchemy.org/en/20/core/engines.html#postgresql)
+| Variable      | Description           | Default         |
+|---------------|-----------------------|-----------------|
+| `DB_HOST`     | Database server host  | `localhost`     |
+| `DB_PORT`     | Database server port  | `3306`          |
+| `DB_NAME`     | Database name         | `telegram_shop` |
+| `DB_USER`     | Database username     | `shop_user`     |
+| `DB_PASSWORD` | Database password     | **Required**    |
+| `DB_DRIVER`   | SQLAlchemy driver     | `mysql+pymysql` |
 
 </details>
 
 ## 🚀 Installation
 
-### Option 1: Docker (Recommended)
+### Quick Setup (FastPanel server)
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/telegram_shop.git
-   cd telegram_shop
-   ```
+Use the provided setup script:
 
-2. **Configure environment**
-   ```bash
-   cp .env.example .env
-   nano .env  # Edit with your values
-   ```
+```bash
+sudo bash deploy/setup.sh
+```
 
-3. **Add Bitcoin addresses** (Required ONLY if accepting Bitcoin payments)
-   ```bash
-   nano btc_addresses.txt
-   # Add your Bitcoin addresses, one per line:
-   # bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
-   # bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4
-   # Note: Skip this step if using cash on delivery only
-   ```
-
-4. **Start services**
-   ```bash
-   docker compose up -d --build bot
-   ```
-
-5. **View logs**
-   ```bash
-   docker compose logs -f bot
-   ```
-
-### Option 2: Manual Installation
+### Manual Installation
 
 1. **Clone repository**
    ```bash
@@ -482,7 +446,7 @@ DATABASE_URL = "postgresql+psycopg2://user:password@localhost:5432/db_name"
 2. **Create virtual environment**
    ```bash
    python3.11 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate
    ```
 
 3. **Install dependencies**
@@ -491,25 +455,24 @@ DATABASE_URL = "postgresql+psycopg2://user:password@localhost:5432/db_name"
    pip install -r requirements.txt
    ```
 
-4. **Set up PostgreSQL**
-   ```bash
-   createdb telegram_shop
-   createuser shop_user -P
+4. **Set up MariaDB database**
+   ```sql
+   CREATE DATABASE telegram_shop CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'shop_user'@'localhost' IDENTIFIED BY 'your_strong_password';
+   GRANT ALL PRIVILEGES ON telegram_shop.* TO 'shop_user'@'localhost';
+   FLUSH PRIVILEGES;
    ```
 
 5. **Configure environment**
-    - [Set environment variables in PyCharm](https://stackoverflow.com/questions/42708389/how-to-set-environment-variables-in-pycharm)
-    - Or export them in terminal:
    ```bash
-   export TOKEN="your_bot_token"
-   export OWNER_ID="your_telegram_id"
-   # Set other required variables from .env.example
+   cp .env.example .env
+   nano .env  # Edit with your values
    ```
 
 6. **Add Bitcoin addresses** (optional - only if accepting Bitcoin)
    ```bash
    nano btc_addresses.txt
-   # Add addresses as shown above
+   # Add addresses, one per line
    # Skip if using cash on delivery only
    ```
 
@@ -517,6 +480,31 @@ DATABASE_URL = "postgresql+psycopg2://user:password@localhost:5432/db_name"
    ```bash
    python run.py
    ```
+
+### Running as a systemd service
+
+```bash
+# Copy the service file
+sudo cp deploy/telegram-shop-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Start and enable the service
+sudo systemctl enable --now telegram-shop-bot
+
+# Check status and logs
+sudo systemctl status telegram-shop-bot
+sudo journalctl -u telegram-shop-bot -f
+```
+
+### Monitoring via FastPanel (nginx)
+
+The bot has a built-in monitoring dashboard on port 9090. To proxy it through FastPanel's nginx:
+
+```bash
+sudo cp deploy/nginx-monitoring.conf /etc/nginx/conf.d/
+# Edit server_name in the config
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ### Bot Settings (Dynamic)
 
@@ -1192,7 +1180,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Aiogram](https://github.com/aiogram/aiogram) - Telegram Bot framework
 - [SQLAlchemy](https://www.sqlalchemy.org/) - Database ORM
 - [Redis](https://redis.io/) - Cache and FSM storage
-- [PostgreSQL](https://www.postgresql.org/) - Database
+- [MariaDB](https://mariadb.org/) - Database
 - [Watchdog](https://github.com/gorakhargosh/watchdog) - File system monitoring
 
 ## 📞 Support

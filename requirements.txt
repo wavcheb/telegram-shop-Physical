@@ -5,7 +5,7 @@ aiohttp~=3.12.14
 redis~=6.4.0
 
 # Database drivers
-psycopg2-binary~=2.9
+PyMySQL~=1.1
 
 # Validation & Security
 pydantic~=2.5.0

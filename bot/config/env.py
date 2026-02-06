@@ -33,16 +33,14 @@ class EnvKeys(ABC):
     REDIS_DB: Final = int(os.getenv("REDIS_DB", 0))
     REDIS_PASSWORD: Final = os.getenv("REDIS_PASSWORD")
 
-    # Database (for Docker)
-    POSTGRES_DB: Final = os.getenv("POSTGRES_DB")
-    POSTGRES_USER: Final = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: Final = os.getenv("POSTGRES_PASSWORD")
-    DB_PORT: Final = int(os.getenv("DB_PORT", 5432))
-    DB_DRIVER: Final = os.getenv("DB_DRIVER", "postgresql+psycopg2")
+    # Database (MariaDB/MySQL)
+    DB_HOST: Final = os.getenv("DB_HOST", "localhost")
+    DB_PORT: Final = int(os.getenv("DB_PORT", 3306))
+    DB_NAME: Final = os.getenv("DB_NAME", "telegram_shop")
+    DB_USER: Final = os.getenv("DB_USER", "shop_user")
+    DB_PASSWORD: Final = os.getenv("DB_PASSWORD", "")
+    DB_DRIVER: Final = os.getenv("DB_DRIVER", "mysql+pymysql")
 
     # Monitoring
     MONITORING_HOST: Final = os.getenv("MONITORING_HOST", "localhost")
     MONITORING_PORT: Final = int(os.getenv("MONITORING_PORT", 9090))
-
-    # Database (for manual deploy)
-    DATABASE_URL: Final = "postgresql+psycopg2://user:password@localhost:5432/db_name"  # (setup if you deploy manually)

@@ -1,19 +1,21 @@
 import os
-from pathlib import Path
-from bot.config import EnvKeys
 
 
 def dsn() -> str:
-    if Path("/.dockerenv").exists() or os.getenv("POSTGRES_HOST"):
-        # Running in Docker or with separate PostgreSQL env vars
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("DB_PORT", "5432")
-        user = os.getenv("POSTGRES_USER", "postgres")
-        password = os.getenv("POSTGRES_PASSWORD", "")
-        database = os.getenv("POSTGRES_DB", "telegram_shop")
-        driver = os.getenv("DB_DRIVER", "postgresql+psycopg2")
+    """Build MariaDB/MySQL connection string from environment variables.
 
-        return f"{driver}://{user}:{password}@{host}:{port}/{database}"
+    Supports DATABASE_URL override for testing and custom deployments.
+    """
+    # Allow full override via DATABASE_URL (used in tests, custom setups)
+    override = os.getenv("DATABASE_URL")
+    if override:
+        return override
 
-    # Local development with hardcoded URL
-    return EnvKeys.DATABASE_URL
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "3306")
+    user = os.getenv("DB_USER", "shop_user")
+    password = os.getenv("DB_PASSWORD", "")
+    database = os.getenv("DB_NAME", "telegram_shop")
+    driver = os.getenv("DB_DRIVER", "mysql+pymysql")
+
+    return f"{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"

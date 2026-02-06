@@ -80,9 +80,9 @@ class User(Database.BASE):
     telegram_id = Column(BigInteger, primary_key=True)
     role_id = Column(Integer, ForeignKey('roles.id', ondelete="RESTRICT"), default=1, index=True)
     referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
-    registration_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    registration_date = Column(DateTime, nullable=False, server_default=func.now())
     is_banned = Column(Boolean, nullable=False, default=False, index=True)
-    banned_at = Column(DateTime(timezone=True), nullable=True)
+    banned_at = Column(DateTime, nullable=True)
     banned_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
     ban_reason = Column(Text, nullable=True)
     user_goods = relationship("BoughtGoods", back_populates="user_telegram_id")
@@ -155,7 +155,7 @@ class BoughtGoods(Database.BASE):
     value = Column(Text, nullable=False)
     price = Column(Numeric(12, 2), nullable=False)
     buyer_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
-    bought_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    bought_datetime = Column(DateTime, nullable=False, server_default=func.now())
     unique_id = Column(BigInteger, nullable=False, unique=True)
     user_telegram_id = relationship("User", back_populates="user_goods")
 
@@ -174,7 +174,7 @@ class Operations(Database.BASE):
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
     operation_value = Column(Numeric(12, 2), nullable=False)
-    operation_time = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    operation_time = Column(DateTime, nullable=False, server_default=func.now())
     user_telegram_id = relationship("User")
 
     def __init__(self, user_id: int, operation_value, operation_time, **kw: Any):
@@ -193,7 +193,7 @@ class ReferralEarnings(Database.BASE):
                          nullable=True)  # NULL for admin bonuses
     amount = Column(Numeric(12, 2), nullable=False)
     original_amount = Column(Numeric(12, 2), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     referrer = relationship(
         "User",
@@ -224,8 +224,8 @@ class ReferenceCode(Database.BASE):
 
     code = Column(String(8), primary_key=True)
     created_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    expires_at = Column(DateTime, nullable=True)
     max_uses = Column(Integer, nullable=True)  # None means unlimited
     current_uses = Column(Integer, nullable=False, default=0)
     note = Column(Text, nullable=True)
@@ -256,7 +256,7 @@ class ReferenceCodeUsage(Database.BASE):
     id = Column(Integer, primary_key=True)
     code = Column(String(8), ForeignKey('reference_codes.code', ondelete="CASCADE"), nullable=False, index=True)
     used_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
-    used_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    used_at = Column(DateTime, nullable=False, server_default=func.now())
 
     reference_code = relationship("ReferenceCode", back_populates="usages")
     user = relationship("User", foreign_keys=lambda: [ReferenceCodeUsage.used_by])
@@ -287,11 +287,11 @@ class Order(Database.BASE):
     bitcoin_address = Column(String(100), nullable=True)
     order_status = Column(String(20), nullable=False,
                           default='pending')  # pending, reserved, confirmed, delivered, cancelled, expired
-    reserved_until = Column(DateTime(timezone=True),
+    reserved_until = Column(DateTime,
                             nullable=True)  # Reservation expiration time (configurable timeout)
-    delivery_time = Column(DateTime(timezone=True), nullable=True)  # Planned delivery time set by admin
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_time = Column(DateTime, nullable=True)  # Planned delivery time set by admin
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
 
     buyer = relationship("User", foreign_keys=lambda: [Order.buyer_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
@@ -356,7 +356,7 @@ class CustomerInfo(Database.BASE):
     total_spendings = Column(Numeric(12, 2), nullable=False, default=0)
     completed_orders_count = Column(Integer, nullable=False, default=0)
     bonus_balance = Column(Numeric(12, 2), nullable=False, default=0)
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", foreign_keys=lambda: [CustomerInfo.telegram_id])
 
@@ -382,7 +382,7 @@ class BitcoinAddress(Database.BASE):
     address = Column(String(100), primary_key=True)
     is_used = Column(Boolean, nullable=False, default=False, index=True)
     used_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
-    used_at = Column(DateTime(timezone=True), nullable=True)
+    used_at = Column(DateTime, nullable=True)
     order_id = Column(Integer, ForeignKey('orders.id', ondelete="SET NULL"), nullable=True)
 
     user = relationship("User", foreign_keys=lambda: [BitcoinAddress.used_by])
@@ -399,7 +399,7 @@ class BotSettings(Database.BASE):
     id = Column(Integer, primary_key=True)
     setting_key = Column(String(100), unique=True, nullable=False, index=True)
     setting_value = Column(Text, nullable=True)
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
     def __init__(self, setting_key: str, setting_value: str = None, **kw: Any):
         super().__init__(**kw)
@@ -414,7 +414,7 @@ class ShoppingCart(Database.BASE):
     user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False)
     item_name = Column(String(100), ForeignKey('goods.name', ondelete="CASCADE"), nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
-    added_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    added_at = Column(DateTime, nullable=False, server_default=func.now())
 
     user = relationship("User", foreign_keys=lambda: [ShoppingCart.user_id])
     item = relationship("Goods", foreign_keys=lambda: [ShoppingCart.item_name])
@@ -440,7 +440,7 @@ class InventoryLog(Database.BASE):
     quantity_change = Column(Integer, nullable=False)  # Can be negative or positive
     order_id = Column(Integer, ForeignKey('orders.id', ondelete="SET NULL"), nullable=True, index=True)
     admin_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
     comment = Column(Text, nullable=True)
 
     item = relationship("Goods", foreign_keys=lambda: [InventoryLog.item_name])
@@ -501,7 +501,7 @@ def register_models():
                 else:
                     logging.error(
                         f"Failed to connect to database after {max_retries} attempts. "
-                        f"Please check if PostgreSQL container is running and network is configured correctly.",
+                        f"Please check if MariaDB/MySQL is running and network is configured correctly.",
                         exc_info=True
                     )
                     raise
