@@ -4,10 +4,15 @@
 
 set -e
 
+# Determine project root (parent of deploy/ directory where this script lives)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 APP_DIR="/var/www/telegram-shop"
 APP_USER="www-data"
 
 echo "=== Telegram Shop Bot - Setup ==="
+echo "Project source: $PROJECT_DIR"
 
 # 1. Install system dependencies
 echo "[1/7] Installing system dependencies..."
@@ -17,7 +22,7 @@ apt-get install -y python3 python3-venv python3-pip redis-server
 # 2. Create application directory
 echo "[2/7] Setting up application directory..."
 mkdir -p "$APP_DIR"/{logs,data}
-cp -r . "$APP_DIR/"
+cp -r "$PROJECT_DIR"/. "$APP_DIR/"
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 
 # 3. Create Python virtual environment
